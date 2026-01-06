@@ -6,46 +6,56 @@ use App\Http\Requests\ContatoRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\URL;
 
 class HomeController extends Controller
 {
-    public function index(ContatoRequest $request)
+    /**
+     * Home + Formulário de Contato
+     */
+    public function index(Request $request)
     {
-        // -------------------------
-        // FORMULÁRIO DE CONTATO
-        // -------------------------
+        // ----------------------------------
+        // FORMULÁRIO DE CONTATO (POST)
+        // ----------------------------------
         if ($request->isMethod('post')) {
 
-            $nome = $request->nome;
-            $email = $request->email;
-            $mensagem = $request->mensagem;
+            // validação segura (usa ContatoRequest se quiser manter)
+            $data = app(ContatoRequest::class)->validated();
+
+            $nome     = $data['nome'];
+            $email    = $data['email'];
+            $mensagem = $data['mensagem'];
 
             $assunto = "[Site] Novo contato de {$nome}";
-            $corpo = "Nome: {$nome}\n"
-                   . "E-mail: {$email}\n\n"
-                   . "Mensagem:\n{$mensagem}";
+            $corpo =
+                "Nome: {$nome}\n" .
+                "E-mail: {$email}\n\n" .
+                "Mensagem:\n{$mensagem}";
 
-            $destinatarios = config(
-                'mail.contact_recipients',
-                [config('mail.from.address')]
+            $destinatarios = array_map(
+                'trim',
+                explode(
+                    ',',
+                    config(
+                        'mail.contact_recipients',
+                        config('mail.from.address')
+                    )
+                )
             );
 
-            foreach ($destinatarios as $dest) {
-                Mail::raw($corpo, function ($message) use ($assunto, $dest) {
-                    $message->to($dest)
-                            ->subject($assunto);
-                });
-            }
+            Mail::raw($corpo, function ($message) use ($assunto, $destinatarios) {
+                $message->to($destinatarios)
+                        ->subject($assunto);
+            });
 
             return redirect()
                 ->route('home')
                 ->with('success', 'Mensagem enviada com sucesso! Em breve entraremos em contato.');
         }
 
-        // -------------------------
-        // IMAGENS (static/images)
-        // -------------------------
+        // ----------------------------------
+        // IMAGENS (public/images)
+        // ----------------------------------
         $imagesPath = public_path('images');
         $images = [];
 
@@ -53,7 +63,7 @@ class HomeController extends Controller
             $images = collect(File::files($imagesPath))
                 ->filter(fn ($file) =>
                     in_array(strtolower($file->getExtension()), [
-                        'png','jpg','jpeg','gif','webp'
+                        'png', 'jpg', 'jpeg', 'gif', 'webp'
                     ])
                 )
                 ->map(fn ($file) => 'images/' . $file->getFilename())
@@ -61,23 +71,23 @@ class HomeController extends Controller
                 ->toArray();
         }
 
-        // -------------------------
+        // ----------------------------------
         // SERVIÇOS
-        // -------------------------
+        // ----------------------------------
         $rawServices = [
             'plataforma360',
             'tunelLed',
             'totemMovel',
             'cabine3d',
-            'efeitosEspeciais'
+            'efeitosEspeciais',
         ];
 
         $TITLE_MAP = [
-            'plataforma360' => ['Plataforma 360', 'vídeos imersivos em rotação', 'icones/iconperfect360.jpg'],
-            'tunelLed' => ['Túnel de LED', 'impacto visual instagramável', 'icones/iconperfect360.jpg'],
-            'totemMovel' => ['Totem Móvel', 'captação dinâmica e interação', 'icones/iconperfect360.jpg'],
-            'cabine3d' => ['Cabine Espelhada 3D', 'a queridinha da noite', 'icones/iconperfect360.jpg'],
-            'efeitosEspeciais' => ['Efeitos Especiais', 'fumaça, luzes e efeitos visuais exclusivos', 'icones/iconperfect360.jpg'],
+            'plataforma360'   => ['Plataforma 360', 'vídeos imersivos em rotação', 'icones/iconperfect360.jpg'],
+            'tunelLed'        => ['Túnel de LED', 'impacto visual instagramável', 'icones/iconperfect360.jpg'],
+            'totemMovel'      => ['Totem Móvel', 'captação dinâmica e interação', 'icones/iconperfect360.jpg'],
+            'cabine3d'        => ['Cabine Espelhada 3D', 'a queridinha da noite', 'icones/iconperfect360.jpg'],
+            'efeitosEspeciais'=> ['Efeitos Especiais', 'fumaça, luzes e efeitos visuais exclusivos', 'icones/iconperfect360.jpg'],
         ];
 
         $services = collect($rawServices)->map(function ($key) use ($TITLE_MAP) {
@@ -98,9 +108,10 @@ class HomeController extends Controller
         ]);
     }
 
-    // -------------------------
-    // JSON DE VÍDEOS
-    // -------------------------
+    /**
+     * Lista vídeos (JSON)
+     * ROTA: /videos-list
+     */
     public function listVideos()
     {
         $videosPath = public_path('videos');
@@ -108,8 +119,10 @@ class HomeController extends Controller
 
         if (File::exists($videosPath)) {
             foreach (File::allFiles($videosPath) as $file) {
-                if (in_array(strtolower($file->getExtension()), ['mp4','webm','ogg','mov'])) {
-                    $urls[] = URL::to('videos/' . $file->getRelativePathname());
+                if (in_array(strtolower($file->getExtension()), ['mp4', 'mov', 'webm', 'ogg'])) {
+                    $urls[] = asset(
+                        'videos/' . str_replace('\\', '/', $file->getRelativePathname())
+                    );
                 }
             }
         }
